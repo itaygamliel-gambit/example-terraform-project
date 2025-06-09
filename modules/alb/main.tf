@@ -19,8 +19,11 @@ data "aws_vpc" "main" {
 // lookup the subnets to use based on whether the load balancer is internal or external
 // instead of requiring the user to know the subnet ids to input to the module, they just need to know
 // whether the load balancer needs to be external or internal
-data "aws_subnet_ids" "private" {
-  vpc_id = data.aws_vpc.main.id
+data "aws_subnets" "private" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.main.id]
+  }
   filter {
     name   = "tag:subnet-type"
     values = [local.subnet_tag_value]
@@ -33,10 +36,10 @@ locals {
 
   // if the user passes in less elastic ips than there are subnets make sure that we only use that
   // number of subnets
-  subnets_slice = slice(tolist(data.aws_subnet_ids.private.ids), 0, length(var.elastic_ips))
+  subnets_slice = slice(tolist(data.aws_subnets.private.ids), 0, length(var.elastic_ips))
 
   subnets = [
-    for s in data.aws_subnet_ids.private.ids : s if length(var.elastic_ips) == 0
+    for s in data.aws_subnets.private.ids : s if length(var.elastic_ips) == 0
   ]
 
   subnet_mapping = [
@@ -94,7 +97,7 @@ resource "aws_lb" "main" {
   subnets                          = local.subnets
 
   // dynamically creating access_logs based on whether the user provides the info
-  dynamic access_logs {
+  dynamic "access_logs" {
     iterator = a
     for_each = var.access_logs
     content {
@@ -105,7 +108,7 @@ resource "aws_lb" "main" {
   }
 
   // if the user provides elastic ip information then create this block
-  dynamic subnet_mapping {
+  dynamic "subnet_mapping" {
     iterator = s
     for_each = {
       for subnet in local.subnet_mapping : "${subnet.subnet_id}.${subnet.allocation_id}" => subnet
@@ -127,7 +130,7 @@ resource "aws_lb_target_group" "main" {
   deregistration_delay = var.deregistration_delay
 
   // dynamically create this health check based on the type of target and type of lb
-  dynamic health_check {
+  dynamic "health_check" {
     iterator = h
     for_each = local.health_check[local.health_check_type]
     content {

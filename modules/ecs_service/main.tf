@@ -22,9 +22,12 @@ data "aws_vpc" "main" {
 // an ECS service we know that it should always be created in the app subnets. To prevent misconfiguration
 // or accidentially creating a public service we do not give the user the option to specify the subnets and
 // automatically look them up.
-data "aws_subnet_ids" "private" {
-  count  = var.fargate ? 1 : 0
-  vpc_id = data.aws_vpc.main[0].id
+data "aws_subnets" "private" {
+  count = var.fargate ? 1 : 0
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.main[0].id]
+  }
   filter {
     name   = "tag:subnet-type"
     values = ["app"]
@@ -74,7 +77,7 @@ resource "aws_ecs_service" "main" {
   deployment_minimum_healthy_percent = var.deployment_minimum_healthy_percent
 
   // dynamically attach to a load balancer based on whether a target group is provided
-  dynamic load_balancer {
+  dynamic "load_balancer" {
     iterator = t
     for_each = var.target_group_arns
     content {
@@ -85,17 +88,17 @@ resource "aws_ecs_service" "main" {
   }
 
   // if this is a fargate service then provide the network configuration otherwise don't
-  dynamic network_configuration {
+  dynamic "network_configuration" {
     for_each = var.fargate ? [1] : []
     content {
-      subnets          = flatten(data.aws_subnet_ids.private[*].ids)
+      subnets          = flatten(data.aws_subnets.private[*].ids)
       security_groups  = [aws_security_group.main.id]
       assign_public_ip = false
     }
   }
 
   // If we provide service discovery information then create otherwise don't
-  dynamic service_registries {
+  dynamic "service_registries" {
     for_each = var.service_registry_arns
     content {
       registry_arn   = each.value
@@ -105,7 +108,7 @@ resource "aws_ecs_service" "main" {
   }
 
   // setup the capacity provider strategy based on user input
-  dynamic capacity_provider_strategy {
+  dynamic "capacity_provider_strategy" {
     iterator = s
     for_each = var.capacity_provider_strategies
     content {
