@@ -92,3 +92,4 @@ code is what is expected.
 The structure of my tests were taken from the [Hashicorp Vault Terraform module](https://github.com/hashicorp/terraform-aws-vault/tree/master/test). If you want to
 see some really good examples of what you can do with Terratest check out that repo.
 # Drift Guard Test
+# Drift Guard Test 2
